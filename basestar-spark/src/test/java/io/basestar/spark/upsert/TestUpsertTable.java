@@ -28,6 +28,8 @@ import org.apache.spark.sql.types.StructType;
 import org.junit.jupiter.api.Test;
 
 import java.net.URI;
+import java.time.Instant;
+import java.time.temporal.ChronoUnit;
 import java.util.List;
 import java.util.UUID;
 
@@ -36,6 +38,15 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 
 @Slf4j
 class TestUpsertTable extends AbstractSparkTest {
+
+    private final Instant testTime = ISO8601.now();
+
+    private long tick = 0;
+
+    private Instant nextTick() {
+        tick = tick + 1;
+        return testTime.plus(tick, ChronoUnit.MILLIS);
+    }
 
     @Test
     void testUpsertChanges() {
@@ -78,7 +89,7 @@ class TestUpsertTable extends AbstractSparkTest {
 
         table.provision(session);
 
-        table.applyChanges(createSource, UpsertTable.sequence(ISO8601.now()), r -> UpsertOp.CREATE, r -> r);
+        table.applyChanges(createSource, UpsertTable.sequence(nextTick()), r -> UpsertOp.CREATE, r -> r);
         assertState("After create", session, table, ImmutableList.of(), createDeltas, create);
 
         table.squashDeltas(session);
@@ -97,7 +108,7 @@ class TestUpsertTable extends AbstractSparkTest {
 
         final Dataset<Row> updateSource = bucket.accept(session.createDataset(update, Encoders.bean(D.class)).toDF());
 
-        table.applyChanges(updateSource, UpsertTable.sequence(ISO8601.now()), r -> UpsertOp.UPDATE, r -> r);
+        table.applyChanges(updateSource, UpsertTable.sequence(nextTick()), r -> UpsertOp.UPDATE, r -> r);
         assertState("After update", session, table, create, updateDeltas, updateMerged);
 
         table.squashDeltas(session);
@@ -109,7 +120,7 @@ class TestUpsertTable extends AbstractSparkTest {
         final List<D> deleteMerged = ImmutableList.of(updateMerged.get(0), updateMerged.get(2));
 
         final Dataset<Row> deleteSource = bucket.accept(session.createDataset(delete, Encoders.bean(D.class)).toDF());
-        table.applyChanges(deleteSource, UpsertTable.sequence(ISO8601.now()), r -> UpsertOp.DELETE, r -> r);
+        table.applyChanges(deleteSource, UpsertTable.sequence(nextTick()), r -> UpsertOp.DELETE, r -> r);
         assertState("After delete", session, table, updateMerged, deleteDeltas, deleteMerged);
 
         table.squashDeltas(session);
@@ -140,7 +151,7 @@ class TestUpsertTable extends AbstractSparkTest {
 
         final List<D> result = ImmutableList.<D>builder().addAll(deleteMerged).addAll(merge).build();
 
-        table.applyChanges(mergeSource, UpsertTable.sequence(ISO8601.now()), r -> UpsertOp.CREATE, r -> r);
+        table.applyChanges(mergeSource, UpsertTable.sequence(nextTick()), r -> UpsertOp.CREATE, r -> r);
         assertState("After merge", session, table, deleteMerged, mergeDeltas, result);
 
         table.squashDeltas(session);
@@ -159,7 +170,7 @@ class TestUpsertTable extends AbstractSparkTest {
         final List<D> create2 = ImmutableList.of(new D("d:8", 5L));
         final Dataset<Row> createSource2 = bucket.accept(session.createDataset(create2, Encoders.bean(D.class)).toDF());
 
-        table.applyChanges(createSource2, UpsertTable.sequence(ISO8601.now()), r -> UpsertOp.CREATE, r -> r);
+        table.applyChanges(createSource2, UpsertTable.sequence(nextTick()), r -> UpsertOp.CREATE, r -> r);
         System.err.println(table.select(session).collectAsList());
     }
 
@@ -278,10 +289,10 @@ class TestUpsertTable extends AbstractSparkTest {
                 .build();
         table.provision(session);
 
-        table.applyChanges(createSource, UpsertTable.sequence(ISO8601.now()), r -> UpsertOp.CREATE, r -> r);
+        table.applyChanges(createSource, UpsertTable.sequence(nextTick()), r -> UpsertOp.CREATE, r -> r);
         table.squashDeltas(session);
 
-        table.applyChanges(createSource, UpsertTable.sequence(ISO8601.now()), r -> UpsertOp.CREATE, r -> r);
+        table.applyChanges(createSource, UpsertTable.sequence(nextTick()), r -> UpsertOp.CREATE, r -> r);
 
         assertThrows(DataIntegrityException.class, () -> table.validate(session));
     }
